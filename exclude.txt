@@ -1,0 +1,8 @@
+.venv/
+experiment/
+topology/
+__pycache__/
+.git/
+.ipynb_checkpoints/
+mva-recvis-2024.zip
+*.log

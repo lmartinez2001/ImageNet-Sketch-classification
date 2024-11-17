@@ -1,0 +1,8 @@
+__pycache__/
+data_sketches/
+experiment/
+best_ckpts/
+.ipynb_checkpoints/
+*.log
+private.yml
+data/
