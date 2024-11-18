@@ -23,6 +23,7 @@ class Net(nn.Module):
         backbone_options = {
             'dinos': 'facebook/dinov2-small',
             'dinob': 'facebook/dinov2-base',
+            'dinol': 'facebook/dinov2-large',
             'convnext': 'facebook/convnextv2-base-1k-224',
             'swin': 'microsoft/swinv2-small-patch4-window16-256'
         }
@@ -34,18 +35,18 @@ class Net(nn.Module):
         print(f'Using {model_name} backbone')
 
         # Number of output feartures used as inputs for the classification head
-        if backbone == 'dinos' or backbone == 'dinob':  
+        if backbone == 'dinos' or backbone == 'dinob' or backbone == 'dinol':  
             n_backbone_features: int = 2 * self.backbone.dinov2.layernorm.normalized_shape[0]
             for param in self.backbone.dinov2.parameters():
-                param.requires_grad = False
+                param.requires_grad = finetune
         elif backbone == 'convnext':
             n_backbone_features: int = self.backbone.convnextv2.layernorm.normalized_shape[0]
             for param in self.backbone.convnextv2.parameters():
-                param.requires_grad = False
+                param.requires_grad = finetune
         elif backbone == 'swin':
             n_backbone_features: int = self.backbone.swinv2.layernorm.normalized_shape[0]
             for param in self.backbone.swinv2.parameters():
-                param.requires_grad = False
+                param.requires_grad = finetune
         
         # Freeze backbone
         

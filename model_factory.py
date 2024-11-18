@@ -5,11 +5,9 @@ from model import DinoNet, SwimNEt
 
 
 class ModelFactory:
-    def __init__(self, model_name: str, n_layers, backbone, topological_resolution):
+    def __init__(self, model_name: str, backbone):
         self.model_name = model_name
-        self.n_layers = n_layers
         self.backbone = backbone
-        self.topological_resolution = topological_resolution
         self.model = self.init_model()
         self.train_transform = self.init_train_transform()
         self.val_transform = self.init_val_transform()

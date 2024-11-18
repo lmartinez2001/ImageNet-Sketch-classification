@@ -8,6 +8,7 @@ import torch.optim as optim
 from torchvision import datasets
 from torch.utils.data import DataLoader
 
+
 # from dataset import ImageNetDataset
 
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -130,6 +131,17 @@ def opts() -> argparse.ArgumentParser:
         type=str,
         help='path of the checkpoint to finetune'
     )
+    parser.add_argument(
+        '--from_checkpoint',
+        type=str,
+        help='path of the checkpoint not to restart training form scratch in case of cracsh'
+    )
+    parser.add_argument(
+        '--device',
+        type=int,
+        default=0,
+        help='gpu index to use'
+    )
     args = parser.parse_args()
     return args
 
@@ -165,7 +177,7 @@ def train(
     
     for batch_idx, (data, target) in enumerate(train_loader):
         total_step = batch_idx + (epoch-1) * n_batches
-        if total_step < target_step:
+        if total_step < target_step and not args.finetune:
             for param_group in optimizer.param_groups:
                 param_group['lr'] = warmup_lr(total_step, target_step, args)
 
@@ -255,6 +267,7 @@ def main():
     # options
     args = opts()
 
+    torch.cuda.set_device(args.device)
     # Logging
     logger = Experiment(
         api_key=private['comet']['key'],
@@ -274,7 +287,7 @@ def main():
     model = Net(backbone=args.backbone, finetune=args.finetune)
     if args.finetune:
         print(f'Loaded {args.model_ckpt_path} state dict')
-        model.load_state_dict(torch.load(args.model_ckpt_path))
+        model.load_state_dict(torch.load(args.model_ckpt_path, weights_only=True))
     
     if use_cuda:
         print("Using GPU")
@@ -304,7 +317,7 @@ def main():
     if args.finetune:
         print('Finetuning')
         optimizer = optim.AdamW([
-            {'params': model.backbone.parameters(), 'lr': args.backbone_lr},
+            {'params': model.backbone.dinov2.parameters(), 'lr': args.backbone_lr},
             {'params': model.backbone.classifier.parameters(), 'lr': args.cls_lr}
         ])
 
@@ -313,15 +326,24 @@ def main():
     if args.finetune:
         scheduler = CosineAnnealingLR(optimizer, T_max=(args.epochs))
 
+    start_epoch = 1
+    if args.from_checkpoint:
+        print(f'Restoring from state file {args.from_checkpoint}')
+        checkpoint = torch.load(args.from_checkpoint)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        start_epoch = checkpoint['epoch']
         
     # Loop over the epochs
     best_val_loss = 1e8
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         
         if epoch > args.epochs_before_decay or args.finetune:
             print('Updating scheduler')
             scheduler.step()
-        logger.log_metric('learning_rate', optimizer.param_groups[0]['lr'])
+        if not args.finetune:
+            logger.log_metric('learning_rate', optimizer.param_groups[0]['lr'])
         
         train(model, optimizer, train_loader, use_cuda, epoch, args, logger)
         
@@ -334,7 +356,12 @@ def main():
             
         # also save the model every epoch
         model_file = args.experiment + "/model_" + str(epoch) + "_ft.pth" if args.finetune else args.experiment + "/model_" + str(epoch) + ".pth"
-        torch.save(model.state_dict(), model_file)
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'epoch': current_epoch,
+        }, model_file)
         print(
             "Saved model to "
             + model_file
